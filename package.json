@@ -1,0 +1,27 @@
+{
+  "name": "crap4ts",
+  "version": "0.1.0",
+  "description": "CRAP metric analyzer for TypeScript projects",
+  "type": "module",
+  "bin": {
+    "crap4ts": "bin/crap4ts.js"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.13"
+  }
+}

@@ -1,75 +1,84 @@
-# crap4java
+# crap4ts
 
-`crap4java` is a standalone CRAP metric tool for Java projects, modeled after `crap4clj`.
+`crap4ts` is a standalone CRAP metric analyzer for TypeScript projects.
 
-It combines method cyclomatic complexity with JaCoCo method coverage and reports CRAP scores.
-On each run it deletes stale coverage artifacts, runs coverage, then analyzes the selected files.
+It combines per-function cyclomatic complexity with Istanbul statement coverage and reports the riskiest functions first.
 
 ## Formula
 
-`CRAP = CC^2 * (1 - coverage)^3 + CC`
-
-- `CC` is cyclomatic complexity.
-- `coverage` is method coverage fraction from JaCoCo `INSTRUCTION` counters.
-
-## Coverage Pipeline
-
-For each invocation:
-
-1. Delete stale coverage artifacts:
-   - `target/site/jacoco/`
-   - `target/jacoco.exec`
-2. Run `mvn -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report`
-3. Read `target/site/jacoco/jacoco.xml`
-4. Analyze selected Java files
-
-## Build and Test
-
-```bash
-mvn test
+```text
+CRAP = CC^2 * (1 - coverage)^3 + CC
 ```
 
-## Run
+- `CC` is cyclomatic complexity calculated from the TypeScript AST.
+- `coverage` is the fraction of covered Istanbul statements inside a function.
 
-Build the jar:
+## Supported code
+
+The parser uses the TypeScript Compiler API and supports `.ts` and `.tsx` files. It reports:
+
+- function declarations
+- class methods and accessors
+- named function expressions
+- arrow functions assigned to named variables or properties
+
+It excludes declarations without bodies, constructors, anonymous callbacks, declaration files, and test/spec files.
+
+## Coverage pipeline
+
+Like the original `crap4java`, `crap4ts` generates fresh coverage on every invocation:
+
+1. Group selected files by their nearest `package.json`.
+2. Detect npm, pnpm, or Yarn from `packageManager` and lockfiles.
+3. Detect Vitest or Jest from the package test script and dependencies.
+4. Delete the stale package-local coverage output.
+5. Run the detected test framework with Istanbul JSON reporting.
+6. Read `coverage/coverage-final.json` and analyze that package.
+
+Workspace packages inherit package-manager and test-framework configuration from the project root when it is not declared locally. Package groups run sequentially.
+
+The generated commands are equivalent to:
 
 ```bash
-mvn -DskipTests package
+npm exec -- vitest run --root=. --coverage --coverage.reporter=json --coverage.reportsDirectory=coverage
+npm exec -- jest --rootDir=. --coverage --coverageReporters=json --coverageDirectory=coverage
 ```
 
-From the project root you want to analyze:
+The executable changes to `pnpm exec` or `yarn exec` when detected.
+
+Use another package-relative output location with:
 
 ```bash
-java -jar target/crap4java-0.1.0-SNAPSHOT.jar
+crap4ts --coverage artifacts/coverage-final.json
+```
+
+For the default destination, the package's complete `coverage/` directory is removed before testing. For a custom destination, only the exact JSON file is removed. Paths outside a package are rejected.
+
+If the tests succeed but coverage JSON is absent, analysis continues with coverage and CRAP reported as `N/A`. A failed test command stops the analysis.
+
+## Install and develop
+
+```bash
+npm install
+npm test
+npm run check
+npm run build
 ```
 
 ## CLI
 
 ```text
---help                Print usage to stdout
-(no args)             Analyze all Java files under src/
---changed             Analyze changed Java files under src/
-<file ...>            Analyze only these files
-<directory ...>       Analyze all Java files under each directory's src/ subtree
+crap4ts                         Analyze TypeScript files under src/
+crap4ts --changed               Analyze changed TypeScript files under src/
+crap4ts <path...>               Analyze explicit files or directories
+crap4ts --coverage <file> [...] Set the package-relative Istanbul JSON destination
+crap4ts --help                  Print help
 ```
 
-Examples:
-
-```bash
-java -jar target/crap4java-0.1.0-SNAPSHOT.jar --help
-java -jar target/crap4java-0.1.0-SNAPSHOT.jar
-java -jar target/crap4java-0.1.0-SNAPSHOT.jar --changed
-java -jar target/crap4java-0.1.0-SNAPSHOT.jar src/main/java/demo/Sample.java
-java -jar target/crap4java-0.1.0-SNAPSHOT.jar module-a module-b
-```
+Default discovery finds every `src/` tree in the project, including workspace packages. Explicit directories are searched recursively. Generated directories, dependency directories, declaration files, and common test/spec files are excluded.
 
 ## Exit codes
 
-- `0` success, threshold respected
-- `1` invalid CLI usage
-- `2` CRAP threshold exceeded (`> 8.0`)
-
-## Notes
-
-- If JaCoCo XML is missing, coverage is reported as `N/A`.
-- Report output is sorted by CRAP descending, with `N/A` at the bottom.
+- `0`: analysis succeeded and the threshold was respected
+- `1`: invalid CLI usage or an analysis error
+- `2`: maximum CRAP score exceeded `8.0`
